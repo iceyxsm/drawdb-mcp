@@ -988,6 +988,42 @@ function buildAnalyticsPipeline() {
 
 // --- Template Registry ---
 
+export const TEMPLATE_SUMMARIES = [
+  {
+    name: "saas_multi_tenant",
+    domain: "Multi-tenant SaaS",
+    description:
+      "organizations, users, memberships, api_keys, audit_log with org_id tenant isolation",
+    keywords: ["saas", "multi-tenant", "rls", "organization", "tenant", "b2b", "subscription"],
+  },
+  {
+    name: "ecommerce",
+    domain: "E-commerce",
+    description:
+      "products, categories, orders, order_items, customers, addresses, payments, inventory, reviews",
+    keywords: ["ecommerce", "shop", "store", "products", "orders", "cart", "checkout", "marketplace"],
+  },
+  {
+    name: "fintech_ledger",
+    domain: "Financial / accounting",
+    description:
+      "double-entry accounting with append-only ledger_entries, materialized balances, reconciliation_log",
+    keywords: ["fintech", "ledger", "accounting", "transactions", "payments", "wallet", "banking", "double-entry"],
+  },
+  {
+    name: "social_platform",
+    domain: "Social platform",
+    description: "users, posts, comments, likes, follows, notifications, media",
+    keywords: ["social", "feed", "posts", "followers", "comments", "likes", "messaging"],
+  },
+  {
+    name: "analytics_pipeline",
+    domain: "Analytics / event tracking",
+    description: "events, sessions, page_views, conversions, daily aggregates",
+    keywords: ["analytics", "tracking", "events", "metrics", "telemetry", "observability"],
+  },
+];
+
 const TEMPLATES = {
   saas_multi_tenant: {
     name: "saas_multi_tenant",
@@ -1043,7 +1079,7 @@ export function registerTemplateTools(server, store) {
   // --- apply_template ---
   server.tool(
     "apply_template",
-    "Apply a pre-built schema template to the current diagram. Adds all tables, relationships, and indices from the template.",
+    "Apply a pre-built production-grade schema template (UUID PKs, timestamps, indices, comments, proper FKs) to the current diagram. STRONGLY RECOMMENDED when the user's domain matches one of: SaaS multi-tenant, e-commerce, fintech ledger, social platform, analytics pipeline. Use this BEFORE add_table to save time and start from production patterns -- you can still customize with add_field/add_table afterwards. The think_about_schema tool will surface matching templates during entity_identification phase.",
     {
       template_name: z
         .enum(["saas_multi_tenant", "ecommerce", "fintech_ledger", "social_platform", "analytics_pipeline"])

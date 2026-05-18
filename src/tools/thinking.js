@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TEMPLATE_SUMMARIES } from "./templates.js";
 
 /**
  * Sequential thinking for database design.
@@ -211,6 +212,9 @@ You can revise earlier thoughts (isRevision=true, revisesThought=N) or branch (b
           ? THINKING_PHASES[phaseIdx + 1]
           : null;
 
+      // Match templates against accumulated thought text using keyword scoring
+      const relevantTemplates = matchTemplates(thoughtHistory);
+
       const response = {
         persona: SENIOR_DEV_PERSONA,
         thoughtRecorded: {
@@ -225,6 +229,14 @@ You can revise earlier thoughts (isRevision=true, revisesThought=N) or branch (b
           relationships: store.relationships.length,
         },
       };
+
+      // Surface relevant templates during entity_identification phase
+      if ((phase === "entity_identification" || nextPhase === "entity_identification") && relevantTemplates.length > 0) {
+        response.relevant_templates = {
+          note: "These pre-built templates closely match what you are designing. Consider apply_template to seed the schema, then customize with add_table/add_field. This saves significant time and ensures production patterns are followed.",
+          matches: relevantTemplates,
+        };
+      }
 
       if (isRevision && revisesThought) {
         response.revisedThought = revisesThought;
@@ -557,4 +569,39 @@ EDIT PHASES:
       };
     },
   );
+}
+
+
+// --- Helpers ---
+
+/**
+ * Score templates against accumulated thought history using keyword matching.
+ * Returns up to 3 best matches, sorted by score, only those with score > 0.
+ */
+function matchTemplates(thoughts) {
+  if (!thoughts || thoughts.length === 0) return [];
+
+  const corpus = thoughts
+    .map((t) => (t.thought || "").toLowerCase())
+    .join(" ");
+
+  const scored = TEMPLATE_SUMMARIES.map((tmpl) => {
+    let score = 0;
+    for (const kw of tmpl.keywords) {
+      if (corpus.includes(kw.toLowerCase())) score += 1;
+    }
+    if (corpus.includes(tmpl.domain.toLowerCase())) score += 2;
+    return { ...tmpl, score };
+  })
+    .filter((t) => t.score >= 2)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
+  return scored.map((t) => ({
+    name: t.name,
+    domain: t.domain,
+    description: t.description,
+    matched_keywords: t.score,
+    apply_with: `apply_template({"template_name": "${t.name}"})`,
+  }));
 }

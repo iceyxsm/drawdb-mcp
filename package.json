@@ -1,6 +1,6 @@
 {
   "name": "drawdb-mcp",
-  "version": "0.4.0",
+  "version": "0.3.1",
   "description": "MCP server for DrawDB -- exposes database schema diagrams to AI agents for reading, writing, and exporting",
   "type": "module",
   "bin": {
