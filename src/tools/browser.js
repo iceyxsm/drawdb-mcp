@@ -1,5 +1,9 @@
 import { z } from "zod";
 import WebSocket from "ws";
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { homedir, platform, tmpdir } from "node:os";
+import { join } from "node:path";
 
 /**
  * Browser integration tools using Chrome DevTools Protocol (CDP).
@@ -15,6 +19,50 @@ import WebSocket from "ws";
 
 const DEFAULT_CDP_HOST = "127.0.0.1";
 const DEFAULT_CDP_PORT = 9222;
+
+/**
+ * Find Chrome/Chromium executable across platforms.
+ */
+function findChromePath() {
+  const plat = platform();
+  const candidates = [];
+
+  if (plat === "win32") {
+    candidates.push(
+      join(process.env["ProgramFiles"] || "C:\\Program Files", "Google\\Chrome\\Application\\chrome.exe"),
+      join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "Google\\Chrome\\Application\\chrome.exe"),
+      join(process.env["LOCALAPPDATA"] || "", "Google\\Chrome\\Application\\chrome.exe"),
+      join(process.env["ProgramFiles"] || "C:\\Program Files", "Microsoft\\Edge\\Application\\msedge.exe"),
+      join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "Microsoft\\Edge\\Application\\msedge.exe"),
+      join(process.env["ProgramFiles"] || "C:\\Program Files", "BraveSoftware\\Brave-Browser\\Application\\brave.exe"),
+    );
+  } else if (plat === "darwin") {
+    candidates.push(
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "/Applications/Chromium.app/Contents/MacOS/Chromium",
+      "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+      "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+      join(homedir(), "Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+    );
+  } else {
+    // Linux
+    candidates.push(
+      "/usr/bin/google-chrome",
+      "/usr/bin/google-chrome-stable",
+      "/usr/bin/chromium",
+      "/usr/bin/chromium-browser",
+      "/usr/bin/microsoft-edge",
+      "/usr/bin/brave-browser",
+      "/snap/bin/chromium",
+      "/snap/bin/google-chrome",
+    );
+  }
+
+  for (const path of candidates) {
+    if (path && existsSync(path)) return path;
+  }
+  return null;
+}
 
 async function fetchTabs(host, port) {
   const res = await fetch(`http://${host}:${port}/json`);
@@ -107,6 +155,129 @@ async function reloadTab(wsUrl) {
 }
 
 export function registerBrowserTools(server, store) {
+  // --- launch_browser ---
+  server.tool(
+    "launch_browser",
+    `Auto-detect and launch Chrome (or Edge/Brave/Chromium) with remote debugging enabled,
+then open DrawDB. This is a one-shot setup tool -- after this, use open_in_drawdb to push diagrams.
+If a debug-enabled browser is already running, this just opens DrawDB in it.`,
+    {
+      port: z
+        .number()
+        .int()
+        .optional()
+        .default(DEFAULT_CDP_PORT)
+        .describe("CDP debug port to use"),
+      url: z
+        .string()
+        .optional()
+        .default("https://drawdb.app/editor")
+        .describe("URL to open (drawdb.app/editor by default, can be localhost:5173/editor)"),
+      browser_path: z
+        .string()
+        .optional()
+        .describe("Optional explicit path to a Chromium-based browser executable"),
+    },
+    async ({ port, url, browser_path }) => {
+      // First check if debug port is already open
+      try {
+        const tabs = await fetchTabs(DEFAULT_CDP_HOST, port);
+        const drawdbTab = findDrawDBTab(tabs);
+        if (drawdbTab) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Browser is already running with debug port ${port} and DrawDB is open.\n  Tab: ${drawdbTab.title}\n  URL: ${drawdbTab.url}\n\nReady to use open_in_drawdb.`,
+              },
+            ],
+          };
+        }
+        // Debug port open but no DrawDB tab -- open one via CDP
+        const newTab = await fetch(`http://${DEFAULT_CDP_HOST}:${port}/json/new?${encodeURIComponent(url)}`, {
+          method: "PUT",
+        });
+        if (newTab.ok) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Browser already running. Opened ${url} in a new tab.\n\nReady to use open_in_drawdb.`,
+              },
+            ],
+          };
+        }
+      } catch {
+        // Debug port not open -- launch browser
+      }
+
+      // Find browser executable
+      const chromePath = browser_path || findChromePath();
+      if (!chromePath) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Could not find Chrome, Edge, Brave, or Chromium installed.\nPlease install one of them, or pass browser_path explicitly.\n\nAlternatively, launch your browser manually with:\n  chrome --remote-debugging-port=${port}\nthen open ${url}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Launch with isolated user data dir to avoid conflicts with running Chrome
+      const userDataDir = join(tmpdir(), "drawdb-mcp-browser");
+      const args = [
+        `--remote-debugging-port=${port}`,
+        `--user-data-dir=${userDataDir}`,
+        "--no-first-run",
+        "--no-default-browser-check",
+        url,
+      ];
+
+      try {
+        const child = spawn(chromePath, args, {
+          detached: true,
+          stdio: "ignore",
+        });
+        child.unref();
+
+        // Wait up to 5 seconds for the debug port to come up
+        for (let i = 0; i < 25; i++) {
+          await new Promise((r) => setTimeout(r, 200));
+          try {
+            await fetchTabs(DEFAULT_CDP_HOST, port);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Launched browser at ${chromePath}\n  Debug port: ${port}\n  URL: ${url}\n  User data dir: ${userDataDir}\n\nReady to use open_in_drawdb.`,
+                },
+              ],
+            };
+          } catch {
+            // Not ready yet
+          }
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Browser launched but debug port ${port} did not become reachable within 5 seconds. Try find_drawdb_tab to check.`,
+            },
+          ],
+          isError: true,
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: `Failed to launch browser: ${e.message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
   // --- find_drawdb_tab ---
   server.tool(
     "find_drawdb_tab",
