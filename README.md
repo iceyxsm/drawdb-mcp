@@ -1,5 +1,11 @@
 ﻿# drawdb-mcp
 
+[![npm version](https://img.shields.io/npm/v/drawdb-mcp)](https://www.npmjs.com/package/drawdb-mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
+[![MCP](https://img.shields.io/badge/MCP-compatible-purple)](https://modelcontextprotocol.io)
+[![DrawDB](https://img.shields.io/badge/DrawDB-schema%20tool-orange)](https://drawdb.app)
+
 MCP (Model Context Protocol) server for [DrawDB](https://github.com/drawdb-io/drawdb) -- exposes database schema diagrams to AI development agents for reading, writing, and exporting.
 
 ## Features
@@ -171,4 +177,4 @@ This server works with DrawDB's native JSON export format (`.json` or `.ddb` fil
 
 ## License
 
-AGPL-3.0 (same as DrawDB)
+AGPL-3.0
