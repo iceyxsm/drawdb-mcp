@@ -5,6 +5,7 @@ import { registerReadTools } from "./tools/read.js";
 import { registerWriteTools } from "./tools/write.js";
 import { registerExportTools } from "./tools/export.js";
 import { registerArchitectTools } from "./tools/architect.js";
+import { registerThinkingTools } from "./tools/thinking.js";
 
 export async function createServer({ filePath, watch = false }) {
   const store = new DiagramStore(filePath, { watch });
@@ -19,6 +20,7 @@ export async function createServer({ filePath, watch = false }) {
   registerWriteTools(server, store);
   registerExportTools(server, store);
   registerArchitectTools(server, store);
+  registerThinkingTools(server, store);
 
   // Register MCP prompts -- these are surfaced to the AI automatically on connect
   server.prompt(
@@ -34,19 +36,22 @@ export async function createServer({ filePath, watch = false }) {
             text: `You are connected to a DrawDB MCP server managing a database diagram file.
 
 IMPORTANT WORKFLOW RULES:
-1. Before designing ANY new schema, call "design_schema" with the product requirements.
-2. Before modifying an existing schema, call "explain_schema" first to understand it.
-3. After making changes, call "validate_schema_quality" to check for issues.
-4. If the user has a basic schema and wants it improved, call "upgrade_to_production".
-5. For a full production review, call "review_schema".
+1. Before designing ANY new schema, use "think_about_schema" to reason step by step through the design. Call it repeatedly (10-15 times) working through each phase.
+2. Before modifying an existing schema, use "think_about_edit" to reason through the impact.
+3. Before reviewing a schema, use "think_about_review" to analyze it systematically.
+4. After thinking is complete, execute the plan with write tools (add_table, add_field, etc.)
+5. After making changes, call "validate_schema_quality" to check for issues.
+6. Use "get_thinking_context" to review your reasoning so far.
+7. Use "reset_thinking" to start fresh.
 
-NEVER create naive CRUD schemas directly with add_table. Always go through the architect tools first -- they enforce production-grade patterns (proper indexing, audit trails, partitioning, event sourcing, UUID keys, timestamps on every table).
+NEVER create tables directly without thinking first. The thinking tools ensure production-grade output by forcing you to reason through domain analysis, workload patterns, indexing, partitioning, audit trails, and scalability before writing anything.
 
 Available tool groups:
+- THINKING: think_about_schema, think_about_review, think_about_edit, get_thinking_context, reset_thinking
+- ARCHITECT: get_design_prompt, design_schema, validate_schema_quality, explain_schema, review_schema, upgrade_to_production
 - READ: get_schema_summary, list_tables, describe_table, list_relationships, describe_relationship, list_enums, list_types, search_tables
 - WRITE: add_table, add_field, update_field, remove_field, remove_table, add_relationship, remove_relationship, add_index, add_enum, add_note
-- EXPORT: export_ddl, export_dbml, export_json
-- ARCHITECT: get_design_prompt, design_schema, validate_schema_quality, explain_schema, review_schema, upgrade_to_production`,
+- EXPORT: export_ddl, export_dbml, export_json`,
           },
         },
       ],
