@@ -9,6 +9,7 @@ import { registerThinkingTools } from "./tools/thinking.js";
 import { registerTemplateTools } from "./tools/templates.js";
 import { registerMigrationTools } from "./tools/migrations.js";
 import { registerBrowserTools } from "./tools/browser.js";
+import { registerDeployTools } from "./tools/deploy.js";
 
 export async function createServer({ filePath, watch = false }) {
   const store = new DiagramStore(filePath, { watch });
@@ -27,6 +28,7 @@ export async function createServer({ filePath, watch = false }) {
   registerTemplateTools(server, store);
   registerMigrationTools(server, store);
   registerBrowserTools(server, store);
+  registerDeployTools(server, store);
 
   // Register MCP prompts -- these are surfaced to the AI automatically on connect
   server.prompt(
