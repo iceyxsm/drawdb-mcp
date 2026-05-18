@@ -6,7 +6,7 @@
 [![MCP](https://img.shields.io/badge/MCP-compatible-purple)](https://modelcontextprotocol.io)
 [![DrawDB](https://img.shields.io/badge/DrawDB-schema%20tool-orange)](https://drawdb.app)
 
-The most complete MCP (Model Context Protocol) server for [DrawDB](https://github.com/drawdb-io/drawdb). Lets AI agents design, review, edit, and deploy production-grade database schemas end-to-end -- from natural language requirements to deployable SQL files, with live DrawDB browser integration.
+MCP (Model Context Protocol) server for [DrawDB](https://github.com/drawdb-io/drawdb). Lets AI agents design, review, edit, and deploy database schemas end-to-end -- from natural language requirements to deployable SQL files, with live DrawDB browser integration.
 
 41 tools across 8 groups: read, write, export, architect, sequential thinking, templates, migrations, browser integration, and deployment.
 
