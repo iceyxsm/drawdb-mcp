@@ -563,4 +563,38 @@ export function registerWriteTools(server, store) {
       };
     },
   );
+
+  // --- new_diagram ---
+  server.tool(
+    "new_diagram",
+    "Clear the current diagram and start fresh. Removes all tables, relationships, notes, types, and enums. Use this when the user wants to design something new instead of editing the existing diagram.",
+    {
+      database: z
+        .enum(["mysql", "postgresql", "sqlite", "mariadb", "transactsql", "oraclesql"])
+        .optional()
+        .describe("Database dialect for the new diagram. Keeps current dialect if omitted."),
+      title: z.string().optional().describe("Title for the new diagram"),
+    },
+    async ({ database, title }) => {
+      store.diagram.tables = [];
+      store.diagram.relationships = [];
+      store.diagram.notes = [];
+      store.diagram.subjectAreas = [];
+      store.diagram.types = [];
+      store.diagram.enums = [];
+      if (database) store.diagram.database = database;
+      if (title) store.diagram.title = title;
+
+      await store.save();
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Diagram cleared. New diagram ready.\n  Database: ${store.diagram.database}\n  Title: ${store.diagram.title}`,
+          },
+        ],
+      };
+    },
+  );
 }

@@ -332,17 +332,19 @@ If a debug-enabled browser is already running, this just opens DrawDB in it.`,
     "open_in_drawdb",
     `Push the current diagram into a running DrawDB browser tab via Chrome DevTools Protocol.
 Requires Chrome to be launched with --remote-debugging-port=9222 and DrawDB open in a tab.
-The diagram is written directly into DrawDB's IndexedDB store, and the tab reloads to show it.`,
+The diagram is written directly into DrawDB's IndexedDB store. By default, opens the new
+diagram in a new tab so previous work stays visible. Pass new_tab: false to navigate the
+existing tab instead.`,
     {
       host: z.string().optional().default(DEFAULT_CDP_HOST).describe("CDP host"),
       port: z.number().int().optional().default(DEFAULT_CDP_PORT).describe("CDP port"),
-      reload: z
+      new_tab: z
         .boolean()
         .optional()
         .default(true)
-        .describe("Reload the DrawDB tab after injecting the diagram"),
+        .describe("Open the diagram in a new browser tab (default true). Set false to navigate the existing tab."),
     },
-    async ({ host, port, reload }) => {
+    async ({ host, port, new_tab }) => {
       try {
         const tabs = await fetchTabs(host, port);
         const drawdbTab = findDrawDBTab(tabs);
@@ -426,9 +428,38 @@ The diagram is written directly into DrawDB's IndexedDB store, and the tab reloa
           };
         }
 
-        // Navigate to the new diagram URL and reload
-        if (reload) {
-          const navScript = `window.location.href = '/editor/diagrams/${result.diagramId}';`;
+        // Determine the target URL (preserve origin: drawdb.app or localhost)
+        let origin;
+        try {
+          origin = new URL(drawdbTab.url).origin;
+        } catch {
+          origin = "https://drawdb.app";
+        }
+        const targetUrl = `${origin}/editor/diagrams/${result.diagramId}`;
+
+        if (new_tab) {
+          // Open via the CDP HTTP endpoint to create a fresh tab.
+          // This preserves the existing tab so the user can compare diagrams.
+          const newTabRes = await fetch(
+            `http://${host}:${port}/json/new?${encodeURIComponent(targetUrl)}`,
+            { method: "PUT" },
+          );
+          if (!newTabRes.ok) {
+            // Fallback: navigate the existing tab if new tab creation fails
+            const navScript = `window.location.href = '${targetUrl}';`;
+            await runInTab(drawdbTab.webSocketDebuggerUrl, navScript);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Diagram pushed but new tab creation failed (Chrome may not support it). Navigated existing tab instead.\n  Diagram ID: ${result.diagramId}\n  Tables: ${store.tables.length}\n  Relationships: ${store.relationships.length}`,
+                },
+              ],
+            };
+          }
+        } else {
+          // Navigate the existing tab
+          const navScript = `window.location.href = '${targetUrl}';`;
           await runInTab(drawdbTab.webSocketDebuggerUrl, navScript);
         }
 
@@ -436,7 +467,7 @@ The diagram is written directly into DrawDB's IndexedDB store, and the tab reloa
           content: [
             {
               type: "text",
-              text: `Diagram pushed to DrawDB tab successfully.\n  Diagram ID: ${result.diagramId}\n  Tables: ${store.tables.length}\n  Relationships: ${store.relationships.length}\n${reload ? "  Tab navigated to the new diagram." : "  Reload the tab manually to see it."}`,
+              text: `Diagram pushed to DrawDB tab successfully.\n  Diagram ID: ${result.diagramId}\n  Tables: ${store.tables.length}\n  Relationships: ${store.relationships.length}\n${new_tab ? "  Opened in a new tab." : "  Existing tab navigated to the new diagram."}`,
             },
           ],
         };

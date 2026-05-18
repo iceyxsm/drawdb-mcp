@@ -45,7 +45,7 @@ async function main() {
   const openResult = await handlers.open_in_drawdb({
     host: "127.0.0.1",
     port: 9222,
-    reload: true,
+    new_tab: true,
   });
   console.log(openResult.content[0].text);
   console.log();
