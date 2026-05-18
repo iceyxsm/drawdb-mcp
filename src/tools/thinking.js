@@ -92,6 +92,16 @@ const THINKING_PHASES = [
 let thoughtHistory = [];
 let branches = {};
 
+/** Allow other tools to inspect the thinking state. */
+export function getThinkingState() {
+  return {
+    thoughtCount: thoughtHistory.length,
+    hasMainThreadThoughts: thoughtHistory.length > 0,
+    lastPhase: thoughtHistory.length > 0 ? thoughtHistory[thoughtHistory.length - 1].phase : null,
+    lastThoughtNumber: thoughtHistory.length > 0 ? thoughtHistory[thoughtHistory.length - 1].number : 0,
+  };
+}
+
 export function registerThinkingTools(server, store) {
   // --- think_about_schema ---
   server.tool(

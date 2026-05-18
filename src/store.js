@@ -72,6 +72,25 @@ export class DiagramStore {
       this.diagram.database = "";
     }
     if (!this.diagram.title) this.diagram.title = basename(this.filePath, ".json");
+    // Stable diagramId so DrawDB always sees the same diagram across pushes
+    if (!this.diagram.diagramId) {
+      this.diagram.diagramId = this._generateUUID();
+    }
+  }
+
+  _generateUUID() {
+    if (typeof globalThis.crypto?.randomUUID === "function") {
+      return globalThis.crypto.randomUUID();
+    }
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
+  get diagramId() {
+    return this.diagram.diagramId;
   }
 
   // --- Accessors ---

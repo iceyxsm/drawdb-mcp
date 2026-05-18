@@ -33,19 +33,10 @@ Pair it with [postgres-mcp](https://github.com/crystaldba/postgres-mcp) for the 
 
 ## Quick Start
 
-### With npx (no install)
-
-```bash
-npx drawdb-mcp
-```
-
-That's it. The server creates `./drawdb-schema.json` if it doesn't exist and listens on stdio.
-
 ### Install globally
 
 ```bash
 npm install -g drawdb-mcp
-drawdb-mcp --file ./my-schema.json --watch
 ```
 
 ### CLI options

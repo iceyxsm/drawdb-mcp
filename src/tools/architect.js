@@ -84,12 +84,12 @@ export function registerArchitectTools(server, store) {
   // --- design_schema ---
   server.tool(
     "design_schema",
-    `Design a production-grade database schema based on product requirements. 
-This tool returns a comprehensive architecture document with table definitions, 
-relationships, indexing strategies, partitioning plans, and the full SQL DDL -- 
-all optimized for scale, consistency, and operational excellence. 
-The AI agent should then use the write tools (add_table, add_field, add_relationship, etc.) 
-to materialize the design into the DrawDB diagram.`,
+    `Start a production-grade database schema design session. 
+This tool initializes the design with the user's requirements and FORCES the AI into the 
+sequential thinking flow via think_about_schema. It does NOT return a full architecture; 
+the AI must reason through the design step by step.
+
+The AI's next action after this tool MUST be think_about_schema with thoughtNumber=1.`,
     {
       product_description: z
         .string()
@@ -100,33 +100,32 @@ to materialize the design into the DrawDB diagram.`,
       expected_users: z
         .string()
         .optional()
-        .default("1M+")
-        .describe("Expected number of users (e.g., '10M', '100K')"),
+        .default("unspecified")
+        .describe("Expected number of users (e.g., '10M', '100K'). If unspecified, the AI should ASK the user."),
       transactions_per_second: z
         .string()
         .optional()
-        .default("10K")
-        .describe("Expected peak TPS (e.g., '50K', '1K')"),
+        .default("unspecified")
+        .describe("Expected peak TPS (e.g., '50K', '1K'). If unspecified, the AI should ASK."),
       daily_events: z
         .string()
         .optional()
-        .default("100M")
-        .describe("Expected daily event volume (e.g., '500M', '10M')"),
+        .default("unspecified")
+        .describe("Expected daily event volume. If unspecified, the AI should ASK."),
       regions: z
         .string()
         .optional()
-        .default("multi-region")
-        .describe("Deployment regions (e.g., 'us-east, eu-west', 'single-region')"),
+        .default("unspecified")
+        .describe("Deployment regions. If unspecified, the AI should ASK."),
       retention: z
         .string()
         .optional()
-        .default("7 years")
-        .describe("Data retention requirements (e.g., '7 years', '90 days hot + cold archive')"),
+        .default("unspecified")
+        .describe("Data retention requirements. If unspecified, the AI should ASK."),
       dialect: z
         .enum(["postgresql", "mysql", "sqlite", "mariadb", "transactsql", "oraclesql"])
         .optional()
-        .default("postgresql")
-        .describe("Target database dialect"),
+        .describe("Target database dialect. If omitted and the diagram has no dialect set, the AI should ASK or SUGGEST one based on requirements."),
     },
     async ({
       product_description,
@@ -138,47 +137,65 @@ to materialize the design into the DrawDB diagram.`,
       retention,
       dialect,
     }) => {
-      const prompt = `${ARCHITECT_SYSTEM_PROMPT}
+      // Set dialect on the diagram if provided
+      if (dialect && !store.database) {
+        store.diagram.database = dialect;
+        await store.save();
+      }
 
----
+      const requirementsContext = `
+PRODUCT: ${product_description}
+FEATURES: ${features}
+SCALE:
+  - Users: ${expected_users}
+  - TPS: ${transactions_per_second}
+  - Daily events: ${daily_events}
+  - Regions: ${regions}
+  - Retention: ${retention}
+DIALECT: ${dialect || store.database || "(not set -- ask the user)"}
 
-DESIGN REQUEST:
+CURRENT DIAGRAM:
+  - Tables: ${store.tables.length}
+  - Relationships: ${store.relationships.length}
+`;
 
-Product: ${product_description}
+      const missing = [];
+      if (expected_users === "unspecified") missing.push("expected_users");
+      if (transactions_per_second === "unspecified") missing.push("transactions_per_second");
+      if (daily_events === "unspecified") missing.push("daily_events");
+      if (regions === "unspecified") missing.push("regions");
+      if (retention === "unspecified") missing.push("retention");
+      if (!dialect && !store.database) missing.push("dialect");
 
-Features: ${features}
+      const response = {
+        status: "design_session_started",
+        persona: "You are a senior database architect (Stripe, Coinbase, Jane Street, Bloomberg level). Think rigorously, not quickly.",
+        requirements_recorded: requirementsContext,
+        next_action: {
+          required: "think_about_schema",
+          parameters: {
+            thoughtNumber: 1,
+            totalThoughts: 12,
+            phase: "domain_analysis",
+            nextThoughtNeeded: true,
+          },
+          instruction: "DO NOT call add_table, add_enum, add_field, or any write tools yet. You MUST start the sequential thinking loop NOW by calling think_about_schema with the parameters above. Continue calling it (10-15 times) through every phase. Only after thinking completes should you execute write tools.",
+        },
+      };
 
-Expected Scale:
-- Users: ${expected_users}
-- Transactions/second: ${transactions_per_second}
-- Daily events: ${daily_events}
-- Regions: ${regions}
-- Retention: ${retention}
+      if (missing.length > 0) {
+        response.missing_requirements = {
+          fields: missing,
+          instruction: `Before starting deep design, ASK THE USER for: ${missing.join(", ")}. These directly affect partitioning, indexing, and architecture choices. Do not assume defaults.`,
+        };
+      }
 
-Target dialect: ${dialect}
-
-Current diagram state:
-- Database: ${store.database}
-- Existing tables: ${store.tables.map((t) => t.name).join(", ") || "(empty)"}
-- Existing relationships: ${store.relationships.length}
-
----
-
-Provide your complete architecture design. At the end, include a section called "DRAWDB_ACTIONS" that lists the exact tables, fields, and relationships to create using the MCP write tools (add_table, add_field, add_relationship, add_index). Format each action as a JSON object on its own line, like:
-
-{"tool": "add_table", "args": {"name": "...", "fields": [...], "comment": "..."}}
-{"tool": "add_relationship", "args": {"name": "...", "from_table": "...", "from_field": "...", "to_table": "...", "to_field": "...", "cardinality": "...", "on_delete": "..."}}
-{"tool": "add_index", "args": {"table_name": "...", "index_name": "...", "fields": [...], "unique": false}}
-
-This allows the AI agent to execute the design step by step.`;
+      if (!store.database && !dialect) {
+        response.dialect_warning = `No database dialect set. ASK THE USER which one they want, or SUGGEST one based on the requirements (e.g. financial -> postgresql for ACID + types, mobile -> sqlite, time-series analytics -> postgresql + TimescaleDB). Set it via new_diagram or pass dialect to design_schema.`;
+      }
 
       return {
-        content: [
-          {
-            type: "text",
-            text: prompt,
-          },
-        ],
+        content: [{ type: "text", text: JSON.stringify(response, null, 2) }],
       };
     },
   );

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Live integration test for launch_browser + full flow.
  * Run: node test/integration-launch.js
  */
@@ -30,7 +30,7 @@ async function main() {
   console.log("=== Test 1: launch_browser (auto-detect) ===");
   const launchResult = await handlers.launch_browser({
     port: 9222,
-    url: "https://drawdb.app/editor",
+    base_url: "https://drawdb.app",
   });
   console.log(launchResult.content[0].text);
   console.log();
@@ -73,7 +73,7 @@ async function main() {
   console.log("=== Test 4: launch_browser (re-run, should detect existing) ===");
   const relaunchResult = await handlers.launch_browser({
     port: 9222,
-    url: "https://drawdb.app/editor",
+    base_url: "https://drawdb.app",
   });
   console.log(relaunchResult.content[0].text);
   console.log();

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getThinkingState } from "./thinking.js";
 
 const DEFAULT_TABLE_COLOR = "#175e7a";
 
@@ -39,6 +40,43 @@ export function registerWriteTools(server, store) {
         .describe("Table header color (hex)"),
     },
     async ({ name, fields, comment, color }) => {
+      // Soft gate: warn (don't block) if the AI is creating tables on a fresh
+      // schema without any prior thinking. This nudges the AI back to think_about_schema
+      // when starting a new design from scratch.
+      const thinking = getThinkingState();
+      const isFreshSchema = store.tables.length === 0;
+      if (isFreshSchema && !thinking.hasMainThreadThoughts) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  status: "blocked",
+                  reason: "no_thinking_recorded",
+                  message: `You are about to create the first table on an empty schema without any prior reasoning. Production schemas require thinking through workload, indexing, partitioning, and audit needs FIRST.`,
+                  required_action: {
+                    tool: "think_about_schema",
+                    parameters: {
+                      thoughtNumber: 1,
+                      totalThoughts: 12,
+                      phase: "domain_analysis",
+                      nextThoughtNeeded: true,
+                      thought: "(reason about what this system is, who uses it, the consistency model, scale assumptions, etc.)",
+                    },
+                  },
+                  override:
+                    "If you are intentionally creating a quick prototype or the user explicitly asked for a single table, call think_about_schema once with thoughtNumber=1 and nextThoughtNeeded=false to acknowledge the shortcut, then retry add_table.",
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+          isError: true,
+        };
+      }
+
       // Check for duplicate
       if (store.findTable(name)) {
         return {
@@ -507,6 +545,38 @@ export function registerWriteTools(server, store) {
       values: z.array(z.string()).describe("Enum values"),
     },
     async ({ name, values }) => {
+      // Same gate as add_table -- block creating enums on a fresh schema with no thinking
+      const thinking = getThinkingState();
+      const isFreshSchema = store.tables.length === 0 && store.enums.length === 0;
+      if (isFreshSchema && !thinking.hasMainThreadThoughts) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  status: "blocked",
+                  reason: "no_thinking_recorded",
+                  message: `Creating enums on an empty schema without prior design reasoning. Use think_about_schema first.`,
+                  required_action: {
+                    tool: "think_about_schema",
+                    parameters: {
+                      thoughtNumber: 1,
+                      totalThoughts: 12,
+                      phase: "domain_analysis",
+                      nextThoughtNeeded: true,
+                    },
+                  },
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+          isError: true,
+        };
+      }
+
       const existing = store.enums.find(
         (e) => e.name.toLowerCase() === name.toLowerCase(),
       );
