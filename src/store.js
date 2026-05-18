@@ -1,4 +1,4 @@
-﻿import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { watch as fsWatch } from "node:fs";
 import { basename } from "node:path";
 

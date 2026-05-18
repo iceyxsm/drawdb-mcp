@@ -1,4 +1,4 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 
 const ARCHITECT_SYSTEM_PROMPT = `You are a senior database architect with expertise in:
 - High-scale financial systems and exchange infrastructure
@@ -549,6 +549,429 @@ The AI agent will execute these sequentially to upgrade the schema.`;
       return { content: [{ type: "text", text: prompt }] };
     },
   );
+
+  // --- validate_constraints ---
+  server.tool(
+    "validate_constraints",
+    `Perform deep constraint validation on the current schema. Checks type compatibility 
+on FK columns, circular references, naming conventions, redundant indices, missing NOT NULL 
+on FKs, default value types, enum consistency, size validation, reserved words, and 
+relationship integrity. Returns a structured report with severity levels.`,
+    {},
+    async () => {
+      const report = runConstraintValidation(store);
+      return {
+        content: [{ type: "text", text: JSON.stringify(report, null, 2) }],
+      };
+    },
+  );
+}
+
+// --- Constraint Validation Logic ---
+
+const SQL_RESERVED_WORDS = new Set([
+  "user", "order", "group", "table", "index", "select", "insert", "update",
+  "delete", "from", "where", "join", "on", "create", "drop", "alter",
+  "column", "constraint", "primary", "foreign", "key", "references",
+  "check", "default", "null", "not", "and", "or", "in", "between",
+  "like", "is", "as", "set", "values", "into", "grant", "revoke",
+  "commit", "rollback", "transaction", "begin", "end", "case", "when",
+  "then", "else", "having", "limit", "offset", "union", "all", "any",
+  "exists", "distinct", "count", "sum", "avg", "min", "max", "by",
+  "asc", "desc", "with", "recursive", "view", "trigger", "procedure",
+  "function", "database", "schema", "role", "session", "type", "enum",
+  "boolean", "integer", "float", "double", "decimal", "numeric",
+  "varchar", "char", "text", "date", "time", "timestamp", "interval",
+  "array", "row", "level", "comment", "sequence", "partition", "range",
+]);
+
+function runConstraintValidation(store) {
+  const errors = [];
+  const warnings = [];
+  const infos = [];
+
+  // 1. Type compatibility checks on FK columns
+  for (const rel of store.relationships) {
+    const startTable = store.findTableById(rel.startTableId);
+    const endTable = store.findTableById(rel.endTableId);
+    if (!startTable || !endTable) continue;
+
+    const startField = startTable.fields.find((f) => String(f.id) === String(rel.startFieldId));
+    const endField = endTable.fields.find((f) => String(f.id) === String(rel.endFieldId));
+    if (!startField || !endField) continue;
+
+    const startType = normalizeType(startField.type);
+    const endType = normalizeType(endField.type);
+
+    if (startType !== endType) {
+      errors.push({
+        check: "type_compatibility",
+        severity: "error",
+        message: `FK type mismatch: ${startTable.name}.${startField.name} (${startField.type}) references ${endTable.name}.${endField.name} (${endField.type})`,
+        table: startTable.name,
+        field: startField.name,
+      });
+    }
+
+    // Check size compatibility for sized types
+    if (startType === endType && startField.size && endField.size) {
+      if (String(startField.size) !== String(endField.size)) {
+        warnings.push({
+          check: "type_compatibility",
+          severity: "warning",
+          message: `FK size mismatch: ${startTable.name}.${startField.name} (${startField.type}(${startField.size})) references ${endTable.name}.${endField.name} (${endField.type}(${endField.size}))`,
+          table: startTable.name,
+          field: startField.name,
+        });
+      }
+    }
+  }
+
+  // 2. Circular reference detection
+  const circularChains = detectCircularReferences(store);
+  for (const chain of circularChains) {
+    errors.push({
+      check: "circular_reference",
+      severity: "error",
+      message: `Circular FK chain detected: ${chain.join(" -> ")}`,
+      tables: chain,
+    });
+  }
+
+  // 3. Naming convention checks
+  for (const table of store.tables) {
+    if (!isSnakeCase(table.name)) {
+      warnings.push({
+        check: "naming_convention",
+        severity: "warning",
+        message: `Table '${table.name}' is not snake_case`,
+        table: table.name,
+      });
+    }
+
+    for (const field of table.fields) {
+      if (!isSnakeCase(field.name)) {
+        warnings.push({
+          check: "naming_convention",
+          severity: "warning",
+          message: `Column '${table.name}.${field.name}' is not snake_case`,
+          table: table.name,
+          field: field.name,
+        });
+      }
+    }
+  }
+
+  // Check FK naming pattern
+  for (const rel of store.relationships) {
+    const startTable = store.findTableById(rel.startTableId);
+    const startField = startTable ? startTable.fields.find((f) => String(f.id) === String(rel.startFieldId)) : null;
+    if (startTable && startField) {
+      const expectedPattern = "fk_" + startTable.name + "_" + startField.name;
+      if (rel.name.toLowerCase() !== expectedPattern.toLowerCase()) {
+        infos.push({
+          check: "naming_convention",
+          severity: "info",
+          message: `Relationship '${rel.name}' does not follow pattern 'fk_table_column' (expected: '${expectedPattern}')`,
+          relationship: rel.name,
+        });
+      }
+    }
+  }
+
+  // 4. Redundant index detection
+  for (const table of store.tables) {
+    if (!table.indices || table.indices.length < 2) continue;
+
+    for (let i = 0; i < table.indices.length; i++) {
+      for (let j = 0; j < table.indices.length; j++) {
+        if (i === j) continue;
+        const idxA = table.indices[i];
+        const idxB = table.indices[j];
+
+        // Check if idxA is a prefix of idxB (making idxA redundant)
+        if (idxA.fields.length < idxB.fields.length) {
+          const isPrefix = idxA.fields.every(
+            (f, k) => f.toLowerCase() === idxB.fields[k].toLowerCase(),
+          );
+          if (isPrefix && idxA.unique === idxB.unique) {
+            warnings.push({
+              check: "redundant_index",
+              severity: "warning",
+              message: `Index '${idxA.name}' on ${table.name}(${idxA.fields.join(", ")}) is redundant -- covered by '${idxB.name}' on (${idxB.fields.join(", ")})`,
+              table: table.name,
+              index: idxA.name,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // 5. Missing NOT NULL on FK columns
+  for (const rel of store.relationships) {
+    const startTable = store.findTableById(rel.startTableId);
+    if (!startTable) continue;
+    const startField = startTable.fields.find((f) => String(f.id) === String(rel.startFieldId));
+    if (!startField) continue;
+
+    if (!startField.notNull) {
+      warnings.push({
+        check: "missing_not_null_fk",
+        severity: "warning",
+        message: `FK column '${startTable.name}.${startField.name}' is nullable -- FK columns should typically be NOT NULL`,
+        table: startTable.name,
+        field: startField.name,
+      });
+    }
+  }
+
+  // 6. Default value type validation
+  for (const table of store.tables) {
+    for (const field of table.fields) {
+      if (!field.default || field.default === "") continue;
+      const typeIssue = validateDefaultType(field);
+      if (typeIssue) {
+        warnings.push({
+          check: "default_value_type",
+          severity: "warning",
+          message: `${table.name}.${field.name}: ${typeIssue}`,
+          table: table.name,
+          field: field.name,
+        });
+      }
+    }
+  }
+
+  // 7. Enum consistency
+  for (const table of store.tables) {
+    for (const field of table.fields) {
+      if ((field.type === "ENUM" || field.type === "SET") && (!field.values || field.values.length === 0)) {
+        errors.push({
+          check: "enum_consistency",
+          severity: "error",
+          message: `ENUM/SET column '${table.name}.${field.name}' has no values defined`,
+          table: table.name,
+          field: field.name,
+        });
+      }
+    }
+  }
+
+  // 8. Size validation
+  for (const table of store.tables) {
+    for (const field of table.fields) {
+      const type = (field.type || "").toUpperCase();
+      if ((type === "VARCHAR" || type === "CHAR" || type === "NVARCHAR") && !field.size) {
+        warnings.push({
+          check: "size_validation",
+          severity: "warning",
+          message: `Column '${table.name}.${field.name}' is ${type} without a size specified`,
+          table: table.name,
+          field: field.name,
+        });
+      }
+      if ((type === "DECIMAL" || type === "NUMERIC") && !field.size) {
+        warnings.push({
+          check: "size_validation",
+          severity: "warning",
+          message: `Column '${table.name}.${field.name}' is ${type} without precision/scale specified`,
+          table: table.name,
+          field: field.name,
+        });
+      }
+    }
+  }
+
+  // 9. Reserved word detection
+  for (const table of store.tables) {
+    if (SQL_RESERVED_WORDS.has(table.name.toLowerCase())) {
+      warnings.push({
+        check: "reserved_word",
+        severity: "warning",
+        message: `Table name '${table.name}' is a SQL reserved word`,
+        table: table.name,
+      });
+    }
+    for (const field of table.fields) {
+      if (SQL_RESERVED_WORDS.has(field.name.toLowerCase())) {
+        warnings.push({
+          check: "reserved_word",
+          severity: "warning",
+          message: `Column name '${table.name}.${field.name}' is a SQL reserved word`,
+          table: table.name,
+          field: field.name,
+        });
+      }
+    }
+  }
+
+  // 10. Relationship integrity
+  for (const rel of store.relationships) {
+    const startTable = store.findTableById(rel.startTableId);
+    const endTable = store.findTableById(rel.endTableId);
+
+    if (!startTable) {
+      errors.push({
+        check: "relationship_integrity",
+        severity: "error",
+        message: `Relationship '${rel.name}' references non-existent start table (id: ${rel.startTableId})`,
+        relationship: rel.name,
+      });
+      continue;
+    }
+    if (!endTable) {
+      errors.push({
+        check: "relationship_integrity",
+        severity: "error",
+        message: `Relationship '${rel.name}' references non-existent end table (id: ${rel.endTableId})`,
+        relationship: rel.name,
+      });
+      continue;
+    }
+
+    const startField = startTable.fields.find((f) => String(f.id) === String(rel.startFieldId));
+    if (!startField) {
+      errors.push({
+        check: "relationship_integrity",
+        severity: "error",
+        message: `Relationship '${rel.name}' references non-existent field (id: ${rel.startFieldId}) in table '${startTable.name}'`,
+        relationship: rel.name,
+        table: startTable.name,
+      });
+    }
+
+    const endField = endTable.fields.find((f) => String(f.id) === String(rel.endFieldId));
+    if (!endField) {
+      errors.push({
+        check: "relationship_integrity",
+        severity: "error",
+        message: `Relationship '${rel.name}' references non-existent field (id: ${rel.endFieldId}) in table '${endTable.name}'`,
+        relationship: rel.name,
+        table: endTable.name,
+      });
+    }
+  }
+
+  return {
+    summary: {
+      tables: store.tables.length,
+      relationships: store.relationships.length,
+      errors: errors.length,
+      warnings: warnings.length,
+      info: infos.length,
+      status: errors.length > 0 ? "INVALID" : warnings.length > 0 ? "HAS_WARNINGS" : "VALID",
+    },
+    errors,
+    warnings,
+    info: infos,
+  };
+}
+
+function normalizeType(type) {
+  const t = (type || "").toUpperCase();
+  if (t === "SERIAL" || t === "BIGSERIAL") return "INT";
+  if (t === "INTEGER") return "INT";
+  if (t === "BIGINT") return "BIGINT";
+  if (t === "SMALLINT") return "SMALLINT";
+  if (t === "VARCHAR2") return "VARCHAR";
+  if (t === "NVARCHAR") return "VARCHAR";
+  if (t === "TIMESTAMPTZ" || t === "DATETIME" || t === "DATETIME2") return "TIMESTAMP";
+  if (t === "DOUBLE PRECISION" || t === "FLOAT8") return "FLOAT";
+  return t;
+}
+
+function isSnakeCase(name) {
+  return /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/.test(name);
+}
+
+function detectCircularReferences(store) {
+  const chains = [];
+  const tableIds = store.tables.map((t) => String(t.id));
+
+  // Build adjacency list from relationships
+  const graph = new Map();
+  for (const id of tableIds) {
+    graph.set(id, []);
+  }
+  for (const rel of store.relationships) {
+    const from = String(rel.startTableId);
+    const to = String(rel.endTableId);
+    if (graph.has(from)) {
+      graph.get(from).push(to);
+    }
+  }
+
+  // DFS cycle detection
+  const visited = new Set();
+  const inStack = new Set();
+  const path = [];
+
+  function dfs(node) {
+    if (inStack.has(node)) {
+      // Found a cycle
+      const cycleStart = path.indexOf(node);
+      const cycle = path.slice(cycleStart).concat([node]);
+      const tableNames = cycle.map((id) => {
+        const t = store.findTableById(Number(id));
+        return t ? t.name : "unknown";
+      });
+      chains.push(tableNames);
+      return;
+    }
+    if (visited.has(node)) return;
+
+    visited.add(node);
+    inStack.add(node);
+    path.push(node);
+
+    const neighbors = graph.get(node) || [];
+    for (const neighbor of neighbors) {
+      dfs(neighbor);
+    }
+
+    path.pop();
+    inStack.delete(node);
+  }
+
+  for (const id of tableIds) {
+    if (!visited.has(id)) {
+      dfs(id);
+    }
+  }
+
+  return chains;
+}
+
+function validateDefaultType(field) {
+  const type = (field.type || "").toUpperCase();
+  const val = String(field.default);
+  const upper = val.toUpperCase();
+
+  // Skip special defaults
+  if (upper === "NULL" || upper === "CURRENT_TIMESTAMP" || upper === "NOW()" || val.startsWith("(")) {
+    return null;
+  }
+
+  if (type === "INT" || type === "INTEGER" || type === "BIGINT" || type === "SMALLINT") {
+    if (!/^-?\d+$/.test(val)) {
+      return "Default value '" + val + "' is not a valid integer";
+    }
+  }
+
+  if (type === "BOOLEAN" || type === "BIT") {
+    if (!["true", "false", "0", "1"].includes(val.toLowerCase())) {
+      return "Default value '" + val + "' is not a valid boolean";
+    }
+  }
+
+  if (type === "DECIMAL" || type === "NUMERIC" || type === "FLOAT" || type === "DOUBLE") {
+    if (isNaN(Number(val))) {
+      return "Default value '" + val + "' is not a valid number";
+    }
+  }
+
+  return null;
 }
 
 // --- Helper: Build a text snapshot of the current schema for prompts ---

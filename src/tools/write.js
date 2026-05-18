@@ -1,4 +1,4 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 
 const DEFAULT_TABLE_COLOR = "#175e7a";
 
