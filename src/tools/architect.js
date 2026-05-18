@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resetThinkingState } from "./thinking.js";
 
 const ARCHITECT_SYSTEM_PROMPT = `You are a senior database architect with expertise in:
 - High-scale financial systems and exchange infrastructure
@@ -137,11 +138,32 @@ The AI's next action after this tool MUST be think_about_schema with thoughtNumb
       retention,
       dialect,
     }) => {
-      // Set dialect on the diagram if provided
-      if (dialect && !store.database) {
-        store.diagram.database = dialect;
-        await store.save();
+      // Auto-clear the diagram when starting a new design session.
+      // This prevents leftover tables from a previous design polluting the new one.
+      // The user explicitly called design_schema with new requirements, so they want a fresh start.
+      if (store.tables.length > 0 || store.enums.length > 0) {
+        store.diagram.tables = [];
+        store.diagram.relationships = [];
+        store.diagram.notes = [];
+        store.diagram.subjectAreas = [];
+        store.diagram.types = [];
+        store.diagram.enums = [];
+        // Generate a new diagramId so DrawDB treats this as a new diagram
+        store.diagram.diagramId = store._generateUUID();
       }
+
+      // Reset thinking state for the new session
+      resetThinkingState();
+
+      // Set dialect on the diagram if provided
+      if (dialect) {
+        store.diagram.database = dialect;
+      }
+
+      // Set title from product description
+      store.diagram.title = product_description.substring(0, 80);
+
+      await store.save();
 
       const requirementsContext = `
 PRODUCT: ${product_description}

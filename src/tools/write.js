@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getThinkingState } from "./thinking.js";
+import { getThinkingState, resetThinkingState } from "./thinking.js";
 
 const DEFAULT_TABLE_COLOR = "#175e7a";
 
@@ -45,7 +45,7 @@ export function registerWriteTools(server, store) {
       // when starting a new design from scratch.
       const thinking = getThinkingState();
       const isFreshSchema = store.tables.length === 0;
-      if (isFreshSchema && !thinking.hasMainThreadThoughts) {
+      if (isFreshSchema && thinking.thoughtCount < 3) {
         return {
           content: [
             {
@@ -53,20 +53,18 @@ export function registerWriteTools(server, store) {
               text: JSON.stringify(
                 {
                   status: "blocked",
-                  reason: "no_thinking_recorded",
-                  message: `You are about to create the first table on an empty schema without any prior reasoning. Production schemas require thinking through workload, indexing, partitioning, and audit needs FIRST.`,
+                  reason: "insufficient_thinking",
+                  message: `Cannot create tables yet. You have only ${thinking.thoughtCount} thought(s) recorded. Production schemas require at least 3 thinking steps covering domain analysis, workload analysis, and entity identification before writing.`,
                   required_action: {
                     tool: "think_about_schema",
                     parameters: {
-                      thoughtNumber: 1,
+                      thoughtNumber: thinking.lastThoughtNumber + 1,
                       totalThoughts: 12,
-                      phase: "domain_analysis",
+                      phase: thinking.thoughtCount === 0 ? "domain_analysis" : thinking.thoughtCount === 1 ? "workload_analysis" : "entity_identification",
                       nextThoughtNeeded: true,
-                      thought: "(reason about what this system is, who uses it, the consistency model, scale assumptions, etc.)",
                     },
                   },
-                  override:
-                    "If you are intentionally creating a quick prototype or the user explicitly asked for a single table, call think_about_schema once with thoughtNumber=1 and nextThoughtNeeded=false to acknowledge the shortcut, then retry add_table.",
+                  current_thinking_state: thinking,
                 },
                 null,
                 2,
@@ -545,10 +543,10 @@ export function registerWriteTools(server, store) {
       values: z.array(z.string()).describe("Enum values"),
     },
     async ({ name, values }) => {
-      // Same gate as add_table -- block creating enums on a fresh schema with no thinking
+      // Same gate as add_table -- block creating enums on a fresh schema with insufficient thinking
       const thinking = getThinkingState();
       const isFreshSchema = store.tables.length === 0 && store.enums.length === 0;
-      if (isFreshSchema && !thinking.hasMainThreadThoughts) {
+      if (isFreshSchema && thinking.thoughtCount < 3) {
         return {
           content: [
             {
@@ -556,14 +554,14 @@ export function registerWriteTools(server, store) {
               text: JSON.stringify(
                 {
                   status: "blocked",
-                  reason: "no_thinking_recorded",
-                  message: `Creating enums on an empty schema without prior design reasoning. Use think_about_schema first.`,
+                  reason: "insufficient_thinking",
+                  message: `Cannot create enums yet. ${thinking.thoughtCount} thought(s) recorded, need at least 3. Use think_about_schema first.`,
                   required_action: {
                     tool: "think_about_schema",
                     parameters: {
-                      thoughtNumber: 1,
+                      thoughtNumber: thinking.lastThoughtNumber + 1,
                       totalThoughts: 12,
-                      phase: "domain_analysis",
+                      phase: thinking.thoughtCount === 0 ? "domain_analysis" : "workload_analysis",
                       nextThoughtNeeded: true,
                     },
                   },
@@ -655,13 +653,18 @@ export function registerWriteTools(server, store) {
       if (database) store.diagram.database = database;
       if (title) store.diagram.title = title;
 
+      // Reset thinking state so the gate applies to the new design
+      resetThinkingState();
+      // New diagramId so DrawDB treats this as a fresh diagram
+      store.diagram.diagramId = store._generateUUID();
+
       await store.save();
 
       return {
         content: [
           {
             type: "text",
-            text: `Diagram cleared. New diagram ready.\n  Database: ${store.diagram.database}\n  Title: ${store.diagram.title}`,
+            text: `Diagram cleared. New diagram ready.\n  Database: ${store.diagram.database || "(not set -- will be asked)"}\n  Title: ${store.diagram.title}\n\nNext step: call design_schema with the product requirements, or think_about_schema to start reasoning.`,
           },
         ],
       };

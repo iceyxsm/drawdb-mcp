@@ -102,6 +102,12 @@ export function getThinkingState() {
   };
 }
 
+/** Reset thinking state programmatically (called by design_schema on new session). */
+export function resetThinkingState() {
+  thoughtHistory = [];
+  branches = {};
+}
+
 export function registerThinkingTools(server, store) {
   // --- think_about_schema ---
   server.tool(
@@ -195,6 +201,12 @@ You can revise earlier thoughts (isRevision=true, revisesThought=N) or branch (b
       branchId,
       needsMoreThoughts,
     }) => {
+      // Prevent shortcutting: if thoughtNumber < 3 and nextThoughtNeeded is false,
+      // override it to true. You cannot complete a design in fewer than 3 thoughts.
+      if (thoughtNumber < 3 && !nextThoughtNeeded) {
+        nextThoughtNeeded = true;
+      }
+
       // Store the thought
       const entry = {
         number: thoughtNumber,
