@@ -1,10 +1,12 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { watch as fsWatch } from "node:fs";
-import { basename } from "node:path";
+import { basename, dirname } from "node:path";
 
 /**
  * DiagramStore manages loading, caching, and persisting a DrawDB diagram file.
  * Supports both .json and .ddb formats.
+ * If the file does not exist, creates an empty diagram automatically.
  */
 export class DiagramStore {
   constructor(filePath, { watch = false } = {}) {
@@ -15,8 +17,26 @@ export class DiagramStore {
   }
 
   async load() {
-    const raw = await readFile(this.filePath, "utf-8");
-    this.diagram = JSON.parse(raw);
+    if (!existsSync(this.filePath)) {
+      // Auto-create an empty diagram
+      this.diagram = {
+        tables: [],
+        relationships: [],
+        notes: [],
+        subjectAreas: [],
+        types: [],
+        enums: [],
+        database: "postgresql",
+        title: basename(this.filePath, ".json"),
+      };
+      // Ensure directory exists
+      await mkdir(dirname(this.filePath), { recursive: true });
+      await this.save();
+    } else {
+      const raw = await readFile(this.filePath, "utf-8");
+      this.diagram = JSON.parse(raw);
+    }
+
     this._normalize();
 
     if (this.watchEnabled && !this.watcher) {

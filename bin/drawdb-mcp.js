@@ -1,10 +1,10 @@
 ﻿#!/usr/bin/env node
 
 import { parseArgs } from "node:util";
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
 import { createServer } from "../src/index.js";
 
-const { values } = parseArgs({
+const { values, positionals } = parseArgs({
   options: {
     file: { type: "string", short: "f" },
     watch: { type: "boolean", short: "w", default: false },
@@ -21,12 +21,17 @@ Usage:
   drawdb-mcp [options] [file]
 
 Options:
-  -f, --file <path>   Path to a .ddb or .json diagram file
+  -f, --file <path>   Path to a .ddb or .json diagram file (optional)
   -w, --watch         Watch the file for changes and reload automatically
   -h, --help          Show this help message
 
+If no file is specified, defaults to ./drawdb-schema.json in the current
+working directory. If the file does not exist, it will be created automatically
+as an empty diagram.
+
 Examples:
-  drawdb-mcp --file ./schema.ddb
+  drawdb-mcp
+  drawdb-mcp --file ./schema.json
   drawdb-mcp --file ./schema.json --watch
   drawdb-mcp ./my-project/database.ddb
 
@@ -36,16 +41,8 @@ Compatible with Claude Code, Cursor, VS Code (Copilot), Windsurf, Kiro, and more
   process.exit(0);
 }
 
-const filePath = values.file || process.argv[process.argv.length - 1];
-
-if (!filePath || filePath.endsWith("drawdb-mcp.js")) {
-  console.error(
-    "Error: No diagram file specified. Use --file <path> or pass a file as argument.",
-  );
-  console.error("Run drawdb-mcp --help for usage information.");
-  process.exit(1);
-}
-
+// Resolve file path: explicit flag > positional arg > default
+const filePath = values.file || positionals[0] || "drawdb-schema.json";
 const resolvedPath = resolve(filePath);
 
 const server = await createServer({ filePath: resolvedPath, watch: values.watch });
