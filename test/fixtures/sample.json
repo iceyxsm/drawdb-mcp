@@ -1,0 +1,255 @@
+{
+  "tables": [
+    {
+      "id": 0,
+      "name": "users",
+      "x": 100,
+      "y": 100,
+      "fields": [
+        {
+          "id": 0,
+          "name": "id",
+          "type": "INT",
+          "default": "",
+          "check": "",
+          "primary": true,
+          "unique": true,
+          "notNull": true,
+          "increment": true,
+          "comment": "Primary key"
+        },
+        {
+          "id": 1,
+          "name": "email",
+          "type": "VARCHAR",
+          "size": "255",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": true,
+          "notNull": true,
+          "increment": false,
+          "comment": "User email address"
+        },
+        {
+          "id": 2,
+          "name": "name",
+          "type": "VARCHAR",
+          "size": "100",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": ""
+        },
+        {
+          "id": 3,
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "default": "CURRENT_TIMESTAMP",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": ""
+        }
+      ],
+      "comment": "Application users",
+      "indices": [
+        {
+          "name": "idx_users_email",
+          "unique": true,
+          "fields": ["email"]
+        }
+      ],
+      "color": "#175e7a"
+    },
+    {
+      "id": 1,
+      "name": "posts",
+      "x": 400,
+      "y": 100,
+      "fields": [
+        {
+          "id": 0,
+          "name": "id",
+          "type": "INT",
+          "default": "",
+          "check": "",
+          "primary": true,
+          "unique": true,
+          "notNull": true,
+          "increment": true,
+          "comment": ""
+        },
+        {
+          "id": 1,
+          "name": "user_id",
+          "type": "INT",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "FK to users"
+        },
+        {
+          "id": 2,
+          "name": "title",
+          "type": "VARCHAR",
+          "size": "200",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": ""
+        },
+        {
+          "id": 3,
+          "name": "body",
+          "type": "TEXT",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": false,
+          "increment": false,
+          "comment": ""
+        },
+        {
+          "id": 4,
+          "name": "status",
+          "type": "ENUM",
+          "default": "draft",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "values": ["draft", "published", "archived"]
+        }
+      ],
+      "comment": "Blog posts",
+      "indices": [],
+      "color": "#175e7a"
+    },
+    {
+      "id": 2,
+      "name": "comments",
+      "x": 700,
+      "y": 100,
+      "fields": [
+        {
+          "id": 0,
+          "name": "id",
+          "type": "INT",
+          "default": "",
+          "check": "",
+          "primary": true,
+          "unique": true,
+          "notNull": true,
+          "increment": true,
+          "comment": ""
+        },
+        {
+          "id": 1,
+          "name": "post_id",
+          "type": "INT",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": ""
+        },
+        {
+          "id": 2,
+          "name": "user_id",
+          "type": "INT",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": ""
+        },
+        {
+          "id": 3,
+          "name": "content",
+          "type": "TEXT",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": ""
+        }
+      ],
+      "comment": "",
+      "indices": [],
+      "color": "#175e7a"
+    }
+  ],
+  "relationships": [
+    {
+      "id": 0,
+      "name": "posts_user_id_fk",
+      "startTableId": 1,
+      "startFieldId": 1,
+      "endTableId": 0,
+      "endFieldId": 0,
+      "cardinality": "many_to_one",
+      "updateConstraint": "No action",
+      "deleteConstraint": "Cascade"
+    },
+    {
+      "id": 1,
+      "name": "comments_post_id_fk",
+      "startTableId": 2,
+      "startFieldId": 1,
+      "endTableId": 1,
+      "endFieldId": 0,
+      "cardinality": "many_to_one",
+      "updateConstraint": "No action",
+      "deleteConstraint": "Cascade"
+    },
+    {
+      "id": 2,
+      "name": "comments_user_id_fk",
+      "startTableId": 2,
+      "startFieldId": 2,
+      "endTableId": 0,
+      "endFieldId": 0,
+      "cardinality": "many_to_one",
+      "updateConstraint": "No action",
+      "deleteConstraint": "Set null"
+    }
+  ],
+  "notes": [
+    {
+      "id": 0,
+      "x": 100,
+      "y": 400,
+      "title": "Schema Notes",
+      "content": "This is a simple blog schema",
+      "color": "#fcf7ac",
+      "height": 88,
+      "width": 180
+    }
+  ],
+  "subjectAreas": [],
+  "database": "mysql",
+  "types": [],
+  "enums": [],
+  "title": "Blog Schema"
+}

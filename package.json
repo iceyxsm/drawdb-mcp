@@ -1,0 +1,52 @@
+﻿{
+  "name": "drawdb-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for DrawDB -- exposes database schema diagrams to AI agents for reading, writing, and exporting",
+  "type": "module",
+  "bin": {
+    "drawdb-mcp": "./bin/drawdb-mcp.js"
+  },
+  "main": "./src/index.js",
+  "scripts": {
+    "start": "node bin/drawdb-mcp.js",
+    "dev": "node --watch bin/drawdb-mcp.js",
+    "test": "node test/smoke.js"
+  },
+  "keywords": [
+    "drawdb",
+    "mcp",
+    "model-context-protocol",
+    "database",
+    "schema",
+    "erd",
+    "diagram",
+    "ai",
+    "agents",
+    "claude",
+    "cursor",
+    "copilot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iceyxsm/drawdb-mcp.git"
+  },
+  "homepage": "https://github.com/iceyxsm/drawdb-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/iceyxsm/drawdb-mcp/issues"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "chokidar": "^4.0.3",
+    "zod": "^3.24.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md"
+  ]
+}
