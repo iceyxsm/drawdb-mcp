@@ -95,7 +95,21 @@ let branches = {};
 /** Allow other tools to inspect the thinking state. */
 export function getThinkingState() {
   const coveredPhases = new Set(thoughtHistory.map((t) => t.phase));
-  const REQUIRED = ["domain_analysis", "workload_analysis", "entity_identification"];
+  const REQUIRED = [
+    "domain_analysis",
+    "workload_analysis",
+    "entity_identification",
+    "relationship_mapping",
+    "normalization_decisions",
+    "indexing_strategy",
+    "partitioning_strategy",
+    "audit_compliance",
+    "event_sourcing",
+    "performance_optimization",
+    "migration_strategy",
+    "review_and_revise",
+    "final_plan",
+  ];
   const missingRequired = REQUIRED.filter((p) => !coveredPhases.has(p));
 
   return {
@@ -105,7 +119,7 @@ export function getThinkingState() {
     lastThoughtNumber: thoughtHistory.length > 0 ? thoughtHistory[thoughtHistory.length - 1].number : 0,
     coveredPhases: [...coveredPhases],
     missingRequiredPhases: missingRequired,
-    isReadyForWrites: missingRequired.length === 0 && thoughtHistory.length >= 3,
+    isReadyForWrites: missingRequired.length === 0,
   };
 }
 
@@ -209,8 +223,22 @@ You can revise earlier thoughts (isRevision=true, revisesThought=N) or branch (b
       needsMoreThoughts,
     }) => {
       // Enforce minimum phase coverage: the AI cannot complete thinking until
-      // it has covered at least domain_analysis, workload_analysis, and entity_identification.
-      const REQUIRED_PHASES_BEFORE_COMPLETE = ["domain_analysis", "workload_analysis", "entity_identification"];
+      // it has covered ALL 13 phases.
+      const REQUIRED_PHASES_BEFORE_COMPLETE = [
+        "domain_analysis",
+        "workload_analysis",
+        "entity_identification",
+        "relationship_mapping",
+        "normalization_decisions",
+        "indexing_strategy",
+        "partitioning_strategy",
+        "audit_compliance",
+        "event_sourcing",
+        "performance_optimization",
+        "migration_strategy",
+        "review_and_revise",
+        "final_plan",
+      ];
       const coveredPhases = new Set(thoughtHistory.map((t) => t.phase));
       coveredPhases.add(phase); // include current thought
 
