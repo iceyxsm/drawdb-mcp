@@ -18,7 +18,8 @@ export class DiagramStore {
 
   async load() {
     if (!existsSync(this.filePath)) {
-      // Auto-create an empty diagram
+      // Auto-create an empty diagram. Database left empty intentionally so
+      // the AI has to ask the user which dialect they want.
       this.diagram = {
         tables: [],
         relationships: [],
@@ -26,7 +27,7 @@ export class DiagramStore {
         subjectAreas: [],
         types: [],
         enums: [],
-        database: "postgresql",
+        database: "",
         title: basename(this.filePath, ".json"),
       };
       // Ensure directory exists
@@ -67,7 +68,9 @@ export class DiagramStore {
     if (!this.diagram.subjectAreas) this.diagram.subjectAreas = [];
     if (!this.diagram.types) this.diagram.types = [];
     if (!this.diagram.enums) this.diagram.enums = [];
-    if (!this.diagram.database) this.diagram.database = "mysql";
+    if (this.diagram.database === undefined || this.diagram.database === null) {
+      this.diagram.database = "";
+    }
     if (!this.diagram.title) this.diagram.title = basename(this.filePath, ".json");
   }
 
