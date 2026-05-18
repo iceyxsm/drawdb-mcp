@@ -27,7 +27,7 @@ export function registerWriteTools(server, store) {
   // --- add_table ---
   server.tool(
     "add_table",
-    "Add a new table to the diagram with columns and constraints",
+    "Add a new table to the diagram with columns and constraints. IMPORTANT: When designing a NEW schema from scratch, you should call think_about_schema repeatedly FIRST to reason through the design before calling this tool. Direct use is fine when the user is incrementally adding to an existing schema or explicitly asks for a specific table.",
     {
       name: z.string().describe("Table name"),
       fields: z.array(FieldSchema).describe("Array of column definitions"),
