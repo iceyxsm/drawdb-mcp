@@ -94,11 +94,18 @@ let branches = {};
 
 /** Allow other tools to inspect the thinking state. */
 export function getThinkingState() {
+  const coveredPhases = new Set(thoughtHistory.map((t) => t.phase));
+  const REQUIRED = ["domain_analysis", "workload_analysis", "entity_identification"];
+  const missingRequired = REQUIRED.filter((p) => !coveredPhases.has(p));
+
   return {
     thoughtCount: thoughtHistory.length,
     hasMainThreadThoughts: thoughtHistory.length > 0,
     lastPhase: thoughtHistory.length > 0 ? thoughtHistory[thoughtHistory.length - 1].phase : null,
     lastThoughtNumber: thoughtHistory.length > 0 ? thoughtHistory[thoughtHistory.length - 1].number : 0,
+    coveredPhases: [...coveredPhases],
+    missingRequiredPhases: missingRequired,
+    isReadyForWrites: missingRequired.length === 0 && thoughtHistory.length >= 3,
   };
 }
 
@@ -201,9 +208,16 @@ You can revise earlier thoughts (isRevision=true, revisesThought=N) or branch (b
       branchId,
       needsMoreThoughts,
     }) => {
-      // Prevent shortcutting: if thoughtNumber < 3 and nextThoughtNeeded is false,
-      // override it to true. You cannot complete a design in fewer than 3 thoughts.
-      if (thoughtNumber < 3 && !nextThoughtNeeded) {
+      // Enforce minimum phase coverage: the AI cannot complete thinking until
+      // it has covered at least domain_analysis, workload_analysis, and entity_identification.
+      const REQUIRED_PHASES_BEFORE_COMPLETE = ["domain_analysis", "workload_analysis", "entity_identification"];
+      const coveredPhases = new Set(thoughtHistory.map((t) => t.phase));
+      coveredPhases.add(phase); // include current thought
+
+      const missingPhases = REQUIRED_PHASES_BEFORE_COMPLETE.filter((p) => !coveredPhases.has(p));
+
+      if (!nextThoughtNeeded && missingPhases.length > 0) {
+        // Force continuation -- cannot complete without covering required phases
         nextThoughtNeeded = true;
       }
 
@@ -269,11 +283,18 @@ You can revise earlier thoughts (isRevision=true, revisesThought=N) or branch (b
         const guidance = nextPhase
           ? PHASE_GUIDANCE[nextPhase]
           : "Continue reasoning toward the final plan.";
+
+        // If phases were forced to continue, tell the AI which ones are missing
+        const forcedContinuation = missingPhases.length > 0;
         response.next_action = {
-          instruction: `IMMEDIATELY call think_about_schema again with thoughtNumber=${thoughtNumber + 1}. Do NOT call add_table or any write tools yet. Continue thinking like a senior architect.`,
-          suggested_next_phase: nextPhase || phase,
-          guidance_for_next_phase: guidance,
+          instruction: forcedContinuation
+            ? `You have NOT covered required phases yet: [${missingPhases.join(", ")}]. You MUST call think_about_schema again covering these phases before you can complete. Call with thoughtNumber=${thoughtNumber + 1}.`
+            : `IMMEDIATELY call think_about_schema again with thoughtNumber=${thoughtNumber + 1}. Do NOT call add_table or any write tools yet. Continue thinking like a senior architect.`,
+          suggested_next_phase: missingPhases.length > 0 ? missingPhases[0] : (nextPhase || phase),
+          guidance_for_next_phase: PHASE_GUIDANCE[missingPhases.length > 0 ? missingPhases[0] : (nextPhase || phase)] || guidance,
           remaining_thoughts: Math.max(0, totalThoughts - thoughtNumber),
+          phases_covered: [...coveredPhases],
+          phases_still_required: missingPhases,
         };
       } else {
         response.note =

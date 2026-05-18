@@ -45,7 +45,7 @@ export function registerWriteTools(server, store) {
       // when starting a new design from scratch.
       const thinking = getThinkingState();
       const isFreshSchema = store.tables.length === 0;
-      if (isFreshSchema && thinking.thoughtCount < 3) {
+      if (isFreshSchema && !thinking.isReadyForWrites) {
         return {
           content: [
             {
@@ -54,13 +54,13 @@ export function registerWriteTools(server, store) {
                 {
                   status: "blocked",
                   reason: "insufficient_thinking",
-                  message: `Cannot create tables yet. You have only ${thinking.thoughtCount} thought(s) recorded. Production schemas require at least 3 thinking steps covering domain analysis, workload analysis, and entity identification before writing.`,
+                  message: `Cannot create tables yet. Required phases not covered: [${thinking.missingRequiredPhases.join(", ")}]. You have ${thinking.thoughtCount} thought(s) covering phases: [${thinking.coveredPhases.join(", ")}].`,
                   required_action: {
                     tool: "think_about_schema",
                     parameters: {
                       thoughtNumber: thinking.lastThoughtNumber + 1,
                       totalThoughts: 12,
-                      phase: thinking.thoughtCount === 0 ? "domain_analysis" : thinking.thoughtCount === 1 ? "workload_analysis" : "entity_identification",
+                      phase: thinking.missingRequiredPhases[0] || "domain_analysis",
                       nextThoughtNeeded: true,
                     },
                   },
@@ -543,10 +543,9 @@ export function registerWriteTools(server, store) {
       values: z.array(z.string()).describe("Enum values"),
     },
     async ({ name, values }) => {
-      // Same gate as add_table -- block creating enums on a fresh schema with insufficient thinking
       const thinking = getThinkingState();
       const isFreshSchema = store.tables.length === 0 && store.enums.length === 0;
-      if (isFreshSchema && thinking.thoughtCount < 3) {
+      if (isFreshSchema && !thinking.isReadyForWrites) {
         return {
           content: [
             {
@@ -555,13 +554,13 @@ export function registerWriteTools(server, store) {
                 {
                   status: "blocked",
                   reason: "insufficient_thinking",
-                  message: `Cannot create enums yet. ${thinking.thoughtCount} thought(s) recorded, need at least 3. Use think_about_schema first.`,
+                  message: `Cannot create enums yet. Required phases not covered: [${thinking.missingRequiredPhases.join(", ")}]. Use think_about_schema first.`,
                   required_action: {
                     tool: "think_about_schema",
                     parameters: {
                       thoughtNumber: thinking.lastThoughtNumber + 1,
                       totalThoughts: 12,
-                      phase: thinking.thoughtCount === 0 ? "domain_analysis" : "workload_analysis",
+                      phase: thinking.missingRequiredPhases[0] || "domain_analysis",
                       nextThoughtNeeded: true,
                     },
                   },
